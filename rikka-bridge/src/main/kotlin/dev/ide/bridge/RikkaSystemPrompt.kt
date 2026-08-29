@@ -5,13 +5,15 @@ import dev.ide.agent.ModuleInfo
 import dev.ide.agent.ProjectOverview
 
 /**
- * 系统提示生成器。
+ * 系统提示生成器（完整版）。
  *
  * 将 CodeAssist 的实时项目上下文注入系统提示词，
  * 让 AI 了解当前项目结构、模块、依赖等。
  *
- * 这替代了 agent-impl 原有的 SystemPrompt.kt，
- * 增加了 RikkaHub 风格的上下文注入。
+ * 完整版在 Phase 4 增加了：
+ * - 项目记忆摘要（通过 RikkaMemoryStore）
+ * - 技能指令注入（通过 RikkaSkillManager）
+ * - 更详细的工具使用指南（包含扩展工具）
  */
 class RikkaSystemPrompt(
     private val workspace: AgentWorkspace,
