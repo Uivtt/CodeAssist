@@ -57,6 +57,7 @@ object AgentProviders {
             if (providers.isNotEmpty()) {
                 return providers
             }
+            null
         } catch (_: ClassNotFoundException) {
             // rikka-bridge 模块不在类路径上，使用原有 Provider
         } catch (_: Exception) {
