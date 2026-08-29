@@ -109,13 +109,17 @@ class RikkaAgentIntegration private constructor(
 
     /**
      * 创建聊天 ViewModel（供 Compose UI 使用）。
+     * @param loopRunner AgentLoop 运行回调（由 agent-impl 提供）
      */
-    fun createChatViewModel(): RikkaChatViewModel = RikkaChatViewModel(
+    fun createChatViewModel(
+        loopRunner: chat.AgentLoopRunner,
+    ): chat.RikkaChatViewModel = chat.RikkaChatViewModel(
         providerRegistry = providerRegistry,
         toolRegistry = toolRegistry,
         workspace = workspace,
         permissionGate = permissionGate,
         systemPromptProvider = systemPromptProvider,
+        loopRunner = loopRunner,
     )
 
     /**
