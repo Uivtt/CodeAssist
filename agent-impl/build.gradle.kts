@@ -8,6 +8,7 @@ plugins {
 // system prompt.
 dependencies {
     api(project(":agent-api"))
+    implementation(project(":rikka-bridge"))  // Phase 1: RikkaHub provider bridge
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
