@@ -1,38 +1,68 @@
 package dev.ide.bridge
 
+import dev.ide.agent.AgentPermissionGate
+import dev.ide.agent.AgentToolRegistry
 import dev.ide.agent.AgentWorkspace
-import dev.ide.agent.LlmProvider
+import dev.ide.agent.AllowAllGate
 import dev.ide.agent.LlmProviderRegistry
 import dev.ide.agent.SimpleLlmProviderRegistry
+import dev.ide.agent.SimpleToolRegistry
+import dev.ide.bridge.chat.RikkaChatState
+import dev.ide.bridge.chat.RikkaChatViewModel
+import dev.ide.bridge.memory.RikkaMemoryStore
+import dev.ide.bridge.skills.RikkaSkillManager
+import java.io.File
 
 /**
- * RikkaHub ↔ CodeAssist 整合入口。
+ * RikkaHub ↔ CodeAssist 整合入口（完整版 Phase 0-4）。
  *
- * 这是整个改造的核心入口点：
- * 1. 创建 RikkaHub 风格的 LLM Provider（替代 agent-impl 的 Provider）
- * 2. 创建 CodeAssist 工具注册表（复用 BuiltinTools）
- * 3. 提供系统提示（注入项目上下文）
+ * 这是整个改造的核心入口点，组装所有组件：
  *
- * 在 ide-core 的 AgentPlugin 初始化时调用本类的 [create] 方法，
- * 获取完整的 Provider + Tool 集合，注入到 AgentLoop。
+ * Phase 0: LLM Provider（RikkaProviderBridge）
+ * Phase 1: Provider 接入（替代 agent-impl）
+ * Phase 2: 扩展工具（BuildProjectTool / GitTools）
+ * Phase 3: 聊天 UI 桥接（RikkaChatState / RikkaChatViewModel）
+ * Phase 4: 记忆系统 + 技能系统
+ *
+ * 使用方式：
+ * ```kotlin
+ * val integration = RikkaAgentIntegration.create(
+ *     workspace = ideEngine.agentWorkspace,
+ *     apiKeys = RikkaApiKeys.fromSettings(),
+ *     skillsDir = File(projectRoot, ".agents/skills"),
+ *     permissionGate = AgentPermissionGate(mode),  // or AllowAllGate
+ * )
+ *
+ * // 获取聊天 ViewModel
+ * val viewModel = integration.createChatViewModel()
+ * ```
  */
 class RikkaAgentIntegration private constructor(
     val providerRegistry: LlmProviderRegistry,
-    val toolRegistry: dev.ide.agent.AgentToolRegistry,
+    val toolRegistry: AgentToolRegistry,
     val systemPromptProvider: RikkaSystemPrompt,
+    val memoryStore: RikkaMemoryStore,
+    val skillManager: RikkaSkillManager,
+    val chatState: RikkaChatState,
+    private val workspace: AgentWorkspace,
+    private val permissionGate: AgentPermissionGate,
 ) {
     companion object {
         /**
          * 创建整合实例。
          *
-         * @param workspace CodeAssist 的项目工作区
+         * @param workspace CodeAssist 项目工作区
          * @param apiKeys 用户的 API Key 配置
+         * @param skillsDir 技能目录路径（.agents/skills/）
+         * @param permissionGate 权限策略
          */
         fun create(
             workspace: AgentWorkspace,
             apiKeys: RikkaApiKeys,
+            skillsDir: File = File(".agents/skills"),
+            permissionGate: AgentPermissionGate = AllowAllGate,
         ): RikkaAgentIntegration {
-            // 1. 创建 Provider 列表
+            // Phase 0: 创建 Provider 列表
             val providers = buildList {
                 if (apiKeys.anthropic.isNotBlank()) add(RikkaProviderBridge.anthropic(apiKeys.anthropic))
                 if (apiKeys.openai.isNotBlank()) add(RikkaProviderBridge.openai(apiKeys.openai))
@@ -42,42 +72,66 @@ class RikkaAgentIntegration private constructor(
                 add(RikkaProviderBridge.local(apiKeys.localBaseUrl))
             }
 
-            // 2. 创建工具注册表
+            // Phase 2: 创建工具注册表（原有 BuiltinTools + 扩展工具）
             val toolRegistry = RikkaToolRegistry.create(workspace)
+            // 尝试添加扩展工具
+            val extendedRegistry = try {
+                val builtin = toolRegistry.tools
+                RikkaExtendedTools.createWithExtended(workspace, builtin)
+            } catch (_: Exception) {
+                toolRegistry
+            }
 
-            // 3. 创建系统提示
+            // Phase 4: 记忆系统和技能系统
+            val memoryStore = RikkaMemoryStore(workspace)
+            val skillManager = RikkaSkillManager(skillsDir)
+            // 默认启用 android-dev 技能
+            skillManager.enable("android-dev")
+
+            // Phase 4: 系统提示（包含记忆和技能）
             val systemPrompt = RikkaSystemPrompt(workspace)
+
+            // Phase 3: 聊天状态
+            val chatState = RikkaChatState()
 
             return RikkaAgentIntegration(
                 providerRegistry = SimpleLlmProviderRegistry(providers),
-                toolRegistry = toolRegistry,
+                toolRegistry = extendedRegistry,
                 systemPromptProvider = systemPrompt,
+                memoryStore = memoryStore,
+                skillManager = skillManager,
+                chatState = chatState,
+                workspace = workspace,
+                permissionGate = permissionGate,
             )
         }
     }
-}
 
-/**
- * 用户的 API Key 配置。
- * 从 CodeAssist 的 Settings 框架加载。
- */
-data class RikkaApiKeys(
-    val anthropic: String = "",
-    val openai: String = "",
-    val gemini: String = "",
-    val openRouter: String = "",
-    val localBaseUrl: String = "http://localhost:11434",
-) {
-    companion object {
-        /**
-         * 从环境变量加载（用于 GitHub Actions CI）
-         */
-        fun fromEnv(): RikkaApiKeys = RikkaApiKeys(
-            anthropic = System.getenv("ANTHROPIC_API_KEY") ?: "",
-            openai = System.getenv("OPENAI_API_KEY") ?: "",
-            gemini = System.getenv("GEMINI_API_KEY") ?: "",
-            openRouter = System.getenv("OPENROUTER_API_KEY") ?: "",
-            localBaseUrl = System.getenv("LOCAL_LLM_BASE_URL") ?: "http://localhost:11434",
-        )
+    /**
+     * 创建聊天 ViewModel（供 Compose UI 使用）。
+     */
+    fun createChatViewModel(): RikkaChatViewModel = RikkaChatViewModel(
+        providerRegistry = providerRegistry,
+        toolRegistry = toolRegistry,
+        workspace = workspace,
+        permissionGate = permissionGate,
+        systemPromptProvider = systemPromptProvider,
+    )
+
+    /**
+     * 获取完整的系统提示（包含技能指令和记忆摘要）。
+     */
+    suspend fun getSystemPrompt(): String {
+        val base = systemPromptProvider.build()
+        val skills = skillManager.enabledInstructions()
+        val memory = memoryStore.summary()
+        return buildString {
+            append(base)
+            if (memory.isNotBlank()) {
+                append("\n\n")
+                append(memory)
+            }
+            append(skills)
+        }
     }
 }
