@@ -6,18 +6,14 @@ plugins {
 // rikka-bridge 是纯 Kotlin/JVM 模块，不依赖 Android SDK
 // 它桥接 CodeAssist 的 agent-api 和 RikkaHub 的 LLM 能力
 //
-// Phase 0: LLM Provider 适配器 (RikkaProviderBridge + RikkaLlmClient)
-// Phase 1: 接入 agent-impl (通过 Providers.kt)
-// Phase 2: 扩展工具 (BuildProjectTool + GitTools)
-// Phase 3: 聊天 UI 桥接 (RikkaChatState + RikkaChatViewModel)
-// Phase 4: 记忆系统 + 技能系统
+// 注意: rikka-bridge 只依赖 agent-api（接口层），不依赖 agent-impl（实现层）
+// 因为 agent-impl 依赖 rikka-bridge（Phase 1 接入），如果反过来依赖会形成循环。
+// RikkaChatViewModel 通过 AgentLoopRunner 回调接口运行 AgentLoop，
+// 实际的 AgentLoop 创建在 agent-impl 或 ide-core 中完成。
 
 dependencies {
-    // CodeAssist agent API（接口定义）
+    // CodeAssist agent API（接口定义，不形成循环）
     implementation(project(":agent-api"))
-    
-    // CodeAssist agent-impl（用于 AgentLoop、BuiltinTools、LlmTransport）
-    implementation(project(":agent-impl"))
     
     // 共享依赖
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
