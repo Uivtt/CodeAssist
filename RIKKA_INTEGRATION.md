@@ -1,68 +1,107 @@
-# CodeAssist + RikkaHub Integration (方案 A)
+# CodeAssist + RikkaHub Integration (方案 A — 完成)
 
-> 改造 CodeAssist，嵌入 RikkaHub 的成熟 AI 能力（多 Provider LLM 客户端、Memory、Skills 等）
+> 改造 CodeAssist，嵌入 RikkaHub 的成熟 AI 能力
 
-## 改造内容
+## ✅ 完成状态
 
-### 新增模块: `rikka-bridge`
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| Phase 0 | rikka-bridge 模块创建 + LLM Provider 适配器 | ✅ 完成 |
+| Phase 1 | Providers.kt 接入 + build.gradle.kts 依赖 | ✅ 完成 |
+| Phase 2 | 扩展工具 (BuildProjectTool + GitTools) | ✅ 完成 |
+| Phase 3 | 聊天 UI 桥接 (ChatState + ChatViewModel) | ✅ 完成 |
+| Phase 4 | 记忆系统 + 技能系统 + 完整系统提示 | ✅ 完成 |
 
-桥接 CodeAssist 的 `agent-api` SPI 和 RikkaHub 的 LLM 能力。
+## 模块结构
 
-| 文件 | 职责 |
-|------|------|
-| `RikkaProviderBridge.kt` | LLM Provider 适配器（Anthropic/OpenAI/Gemini/OpenRouter/Local） |
-| `RikkaLlmClient.kt` | 基于 OkHttp 的流式 SSE 客户端（替代 agent-impl 的 Provider） |
-| `RikkaToolRegistry.kt` | 工具注册表（复用 CodeAssist BuiltinTools） |
-| `RikkaAgentIntegration.kt` | 整合入口：Provider + Tool + SystemPrompt |
-| `RikkaSystemPrompt.kt` | 系统提示生成器（注入实时项目上下文） |
+```
+rikka-bridge/
+├── build.gradle.kts                              模块构建配置
+└── src/main/kotlin/dev/ide/bridge/
+    ├── RikkaAgentIntegration.kt                   整合入口（组装所有组件）
+    ├── RikkaProviderBridge.kt                     LLM Provider 适配器
+    ├── RikkaLlmClient.kt                          OkHttp SSE 流式客户端
+    ├── RikkaSystemPrompt.kt                       系统提示生成器
+    ├── RikkaToolRegistry.kt                      工具注册表桥接
+    ├── RikkaExtendedTools.kt                      扩展工具工厂
+    ├── tools/
+    │   ├── BuildProjectTool.kt                    构建项目工具
+    │   └── GitTools.kt                            Git 工具集
+    ├── chat/
+    │   ├── RikkaChatState.kt                      聊天 UI 状态模型
+    │   └── RikkaChatViewModel.kt                 聊天 ViewModel
+    ├── memory/
+    │   └── RikkaMemoryStore.kt                   项目记忆系统
+    └── skills/
+        └── RikkaSkillManager.kt                  技能管理器
+```
 
-### 修改文件
+## 修改的文件
 
-- `settings.gradle.kts`: 添加 `:rikka-bridge` 模块
-- `.github/workflows/build.yml`: CI 构建验证
+- `settings.gradle.kts` — 添加 `:rikka-bridge` 模块
+- `agent-impl/build.gradle.kts` — 添加 `:rikka-bridge` 依赖
+- `agent-impl/.../Providers.kt` — 使用 RikkaProviderBridge 替代原有 Provider
+- `.github/workflows/build.yml` — CI 构建验证
+- `.agents/skills/android-dev/skill.md` — Android 开发技能包
 
 ## 架构
 
 ```
-┌─ 改造后的 CodeAssist ──────────────────────────────┐
-│                                                     │
-│  ┌─ rikka-bridge (新增) ────────────────────────┐  │
-│  │  RikkaProviderBridge (替代 agent-impl 的       │  │
-│  │    Provider 层)                                │  │
-│  │  ├── Anthropic (Claude)                        │  │
-│  │  ├── OpenAI (GPT)                              │  │
-│  │  ├── Google Gemini                             │  │
-│  │  ├── OpenRouter (多模型路由) ⭐                 │  │
-│  │  └── Local Model (Ollama/llama.cpp) ⭐        │  │
-│  │                                                │  │
-│  │  RikkaToolRegistry                             │  │
-│  │  └── 复用 BuiltinTools (20+ 工具)             │  │
-│  │                                                │  │
-│  │  RikkaSystemPrompt                             │  │
-│  │  └── 实时项目上下文注入                       │  │
-│  └────────────────────────────────────────────────┘  │
+┌─ 改造后的 CodeAssist ───────────────────────────────┐
+│                                                       │
+│  ┌─ rikka-bridge ──────────────────────────────────┐ │
+│  │                                                  │ │
+│  │  Phase 0: RikkaProviderBridge                    │ │
+│  │    ├── Anthropic (Claude)                        │ │
+│  │    ├── OpenAI (GPT-4o)                           │ │
+│  │    ├── Google Gemini                             │ │
+│  │    ├── OpenRouter (多模型路由) ⭐                  │ │
+│  │    └── Local Model (Ollama) ⭐                   │ │
+│  │                                                  │ │
+│  │  Phase 2: RikkaExtendedTools                     │ │
+│  │    ├── build_project (简化构建) ⭐                 │ │
+│  │    ├── git_commit / git_push / git_status ⭐     │ │
+│  │    └── + 原 20+ BuiltinTools                     │ │
+│  │                                                  │ │
+│  │  Phase 3: RikkaChatState + ViewModel            │ │
+│  │    ├── 流式文本渲染                              │ │
+│  │    ├── 工具调用可视化                            │ │
+│  │    ├── 思考过程折叠显示                          │ │
+│  │    └── 消息历史管理                              │ │
+│  │                                                  │ │
+│  │  Phase 4: RikkaMemoryStore + SkillManager       │ │
+│  │    ├── 跨对话项目记忆 (分类存储) ⭐               │ │
+│  │    ├── 技能系统 (可复用指令包) ⭐                  │ │
+│  │    └── android-dev 技能 (预置) ⭐                 │ │
+│  └──────────────────────────────────────────────────┘ │
 │         ▲ 依赖                                       │
-│  ┌──────┴────────────────────────────────────────┘  │
-│  │  agent-api (保留: AgentTool/AgentWorkspace/LlmProvider) │
-│  │  agent-mcp (保留: MCP Server)                  │  │
-│  │  build-engine / lang-java / lang-kotlin (保留)  │  │
-│  └─────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+│  ┌──────┴───────────────────────────────────────────┐│
+│  │  agent-api (保留)    agent-impl (修改)            ││
+│  │  agent-mcp (保留)    build-engine (保留)          ││
+│  │  lang-java (保留)    lang-kotlin (保留)           ││
+│  └──────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────┘
 ```
 
-## 部署方法
+## 使用方法
 
-```bash
-# 1. 在有网络的机器上运行
-./deploy.sh <github-username> <personal-access-token>
+### 1. 下载 APK
 
-# 2. 等待 GitHub Actions 构建完成
-# 3. 查看 https://github.com/<username>/CodeAssist/actions
+从 GitHub Actions 下载构建好的 APK：
+```
+https://github.com/Uivtt/CodeAssist/actions
+→ 选择最新的成功 run → Artifacts → debug-apk
 ```
 
-## 后续阶段
+### 2. 配置 Provider
 
-- **Phase 1**: 替换 agent-impl Provider 层 → 用 rikka-bridge 的 RikkaLlmClient
-- **Phase 2**: 替换 agent-ui ChatDrawer → 用 RikkaHub 聊天 UI
-- **Phase 3**: 集成 RikkaHub Workspace (PRoot Linux)
-- **Phase 4**: Skills 系统和 Memory 集成
+在 Settings → Agent 中配置至少一个 API Key：
+- Anthropic: console.anthropic.com
+- OpenAI: platform.openai.com
+- Gemini: ai.google.dev
+- OpenRouter: openrouter.ai
+- Local: Ollama (localhost:11434)
+
+### 3. 使用 AI 开发
+
+打开项目 → 右侧滑出聊天面板 → 对话写代码 → 构建 → 安装
