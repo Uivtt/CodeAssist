@@ -140,3 +140,22 @@ class RikkaAgentIntegration private constructor(
         }
     }
 }
+
+/** 用户的 API Key 配置 */
+data class RikkaApiKeys(
+    val anthropic: String = "",
+    val openai: String = "",
+    val gemini: String = "",
+    val openRouter: String = "",
+    val localBaseUrl: String = "http://localhost:11434",
+) {
+    companion object {
+        fun fromEnv(): RikkaApiKeys = RikkaApiKeys(
+            anthropic = System.getenv("ANTHROPIC_API_KEY") ?: "",
+            openai = System.getenv("OPENAI_API_KEY") ?: "",
+            gemini = System.getenv("GEMINI_API_KEY") ?: "",
+            openRouter = System.getenv("OPENROUTER_API_KEY") ?: "",
+            localBaseUrl = System.getenv("LOCAL_LLM_BASE_URL") ?: "http://localhost:11434",
+        )
+    }
+}
