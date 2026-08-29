@@ -47,6 +47,7 @@ jobs:
             **/build/test-results/**/*.xml
             **/build/reports/
           retention-days: 7
+          if-no-files-found: ignore
 
   # ── Job 2: 完整 Android 构建（需要 Android SDK）──
   build-android:
