@@ -105,3 +105,7 @@ https://github.com/Uivtt/CodeAssist/actions
 ### 3. 使用 AI 开发
 
 打开项目 → 右侧滑出聊天面板 → 对话写代码 → 构建 → 安装
+
+---
+
+> Last clean rebuild: 2026-08-29T21:25:44Z
