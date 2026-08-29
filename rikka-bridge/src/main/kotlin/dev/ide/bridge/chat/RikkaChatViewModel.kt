@@ -19,28 +19,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
+ * AgentLoop 运行回调接口。
+ *
+ * 由于 rikka-bridge 不能直接依赖 agent-impl（会形成循环依赖），
+ * 通过此接口抽象 AgentLoop 的运行。
+ * 实际实现由 agent-impl 或 ide-core 提供。
+ */
+fun interface AgentLoopRunner {
+    suspend fun run(request: LlmRequest, eventSink: AgentEventSink)
+}
+
+/**
  * 聊天 ViewModel。
  *
  * 连接 UI 层和 Agent 引擎层：
  * - UI 通过 send() 发送用户消息
- * - ViewModel 构建 LlmRequest，驱动 AgentLoop
+ * - ViewModel 构建 LlmRequest，通过 AgentLoopRunner 驱动 AgentLoop
  * - AgentEvent 通过 RikkaChatState 回传给 UI
- *
- * 在实际 App 中，这个 ViewModel 会被注入到 Compose 的 viewModel() 中，
- * UI 通过观察 chatState.messages 渲染聊天界面。
- *
- * 使用方式（伪 Compose 代码）:
- * ```
- * val viewModel: RikkaChatViewModel = viewModel { ... }
- * val messages by viewModel.chatState.messages.collectAsState(initial = emptyList())
- *
- * LazyColumn {
- *     items(messages) { message ->
- *         ChatBubble(message)
- *     }
- * }
- * TextInput(onSend = { viewModel.send(it) })
- * ```
  */
 class RikkaChatViewModel(
     private val providerRegistry: LlmProviderRegistry,
@@ -48,6 +43,7 @@ class RikkaChatViewModel(
     private val workspace: AgentWorkspace,
     private val permissionGate: AgentPermissionGate,
     private val systemPromptProvider: dev.ide.bridge.RikkaSystemPrompt,
+    private val loopRunner: AgentLoopRunner,
 ) {
     val chatState = RikkaChatState()
 
@@ -103,15 +99,8 @@ class RikkaChatViewModel(
                     tools = toolRegistry.specs(),
                 )
 
-                // 驱动 AgentLoop（简化版：直接流式 + 工具调用）
-                val loop = dev.ide.agent.impl.AgentLoop(
-                    client = client,
-                    toolRegistry = toolRegistry,
-                    workspace = workspace,
-                    permissionGate = permissionGate,
-                    eventSink = chatState,
-                )
-                loop.run(request)
+                // 通过回调运行 AgentLoop（实际实现在 agent-impl 中）
+                loopRunner.run(request, chatState)
             } catch (e: Exception) {
                 chatState.emit(dev.ide.agent.AgentEvent.Error(e.message ?: e.toString()))
             } finally {
