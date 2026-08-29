@@ -76,7 +76,6 @@ jobs:
 
       - name: Build Debug APK
         run: ./gradlew --no-daemon :ide-android:assembleDebug --stacktrace
-        continue-on-error: true  # 首次可能缺少某些依赖
 
       - name: Upload APK
         if: always()
