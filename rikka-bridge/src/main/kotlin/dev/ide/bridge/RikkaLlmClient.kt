@@ -8,6 +8,7 @@ import dev.ide.agent.LlmStreamEvent
 import dev.ide.agent.StopReason
 import dev.ide.agent.TokenUsage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -95,8 +96,9 @@ class RikkaLlmClient(
             // 工具调用
             delta["tool_calls"]?.jsonArray?.forEach { tc ->
                 val tcObj = tc.jsonObject
-                val id = tcObj["id"]?.jsonPrimitive?.content ?: currentToolCallId ?: return@forEach
-                val fn = tcObj["function"]?.jsonObject ?: return@forEach
+                val id = tcObj["id"]?.jsonPrimitive?.content ?: currentToolCallId
+                val fn = tcObj["function"]?.jsonObject
+                if (id == null || fn == null) return@forEach
                 val name = fn["name"]?.jsonPrimitive?.content ?: currentToolCallName
 
                 if (name != null && id != currentToolCallId) {
@@ -177,32 +179,36 @@ class RikkaLlmClient(
 
             when (event["type"]?.jsonPrimitive?.content) {
                 "content_block_start" -> {
-                    val block = event["content_block"]?.jsonObject ?: return@when
-                    when (block["type"]?.jsonPrimitive?.content) {
-                        "tool_use" -> {
-                            val id = block["id"]?.jsonPrimitive?.content ?: ""
-                            val name = block["name"]?.jsonPrimitive?.content ?: ""
-                            emit(LlmStreamEvent.ToolCallStarted(id, name))
+                    val block = event["content_block"]?.jsonObject
+                    if (block != null) {
+                        when (block["type"]?.jsonPrimitive?.content) {
+                            "tool_use" -> {
+                                val id = block["id"]?.jsonPrimitive?.content ?: ""
+                                val name = block["name"]?.jsonPrimitive?.content ?: ""
+                                emit(LlmStreamEvent.ToolCallStarted(id, name))
+                            }
                         }
                     }
                 }
                 "content_block_delta" -> {
-                    val delta = event["delta"]?.jsonObject ?: return@when
-                    when (delta["type"]?.jsonPrimitive?.content) {
-                        "text_delta" -> {
-                            delta["text"]?.jsonPrimitive?.contentOrNull?.let {
-                                emit(LlmStreamEvent.TextDelta(it))
+                    val delta = event["delta"]?.jsonObject
+                    if (delta != null) {
+                        when (delta["type"]?.jsonPrimitive?.content) {
+                            "text_delta" -> {
+                                delta["text"]?.jsonPrimitive?.contentOrNull?.let {
+                                    emit(LlmStreamEvent.TextDelta(it))
+                                }
                             }
-                        }
-                        "thinking_delta" -> {
-                            delta["thinking"]?.jsonPrimitive?.contentOrNull?.let {
-                                emit(LlmStreamEvent.ThinkingDelta(it))
+                            "thinking_delta" -> {
+                                delta["thinking"]?.jsonPrimitive?.contentOrNull?.let {
+                                    emit(LlmStreamEvent.ThinkingDelta(it))
+                                }
                             }
-                        }
-                        "input_json_delta" -> {
-                            val id = event["index"]?.jsonPrimitive?.intOrNull?.toString() ?: ""
-                            delta["partial_json"]?.jsonPrimitive?.contentOrNull?.let {
-                                emit(LlmStreamEvent.ToolCallArgsDelta(id, it))
+                            "input_json_delta" -> {
+                                val id = event["index"]?.jsonPrimitive?.intOrNull?.toString() ?: ""
+                                delta["partial_json"]?.jsonPrimitive?.contentOrNull?.let {
+                                    emit(LlmStreamEvent.ToolCallArgsDelta(id, it))
+                                }
                             }
                         }
                     }
@@ -211,15 +217,17 @@ class RikkaLlmClient(
                     // 工具调用完成
                 }
                 "message_delta" -> {
-                    val delta = event["delta"]?.jsonObject ?: return@when
-                    delta["stop_reason"]?.jsonPrimitive?.contentOrNull?.let { reason ->
-                        val stop = when (reason) {
-                            "end_turn" -> StopReason.END_TURN
-                            "tool_use" -> StopReason.TOOL_USE
-                            "max_tokens" -> StopReason.MAX_TOKENS
-                            else -> StopReason.END_TURN
+                    val delta = event["delta"]?.jsonObject
+                    if (delta != null) {
+                        delta["stop_reason"]?.jsonPrimitive?.contentOrNull?.let { reason ->
+                            val stop = when (reason) {
+                                "end_turn" -> StopReason.END_TURN
+                                "tool_use" -> StopReason.TOOL_USE
+                                "max_tokens" -> StopReason.MAX_TOKENS
+                                else -> StopReason.END_TURN
+                            }
+                            emit(LlmStreamEvent.Completed(stop))
                         }
-                        emit(LlmStreamEvent.Completed(stop))
                     }
                     event["usage"]?.let { usage ->
                         val output = usage.jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
