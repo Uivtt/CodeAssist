@@ -7,6 +7,7 @@ import dev.ide.agent.AllowAllGate
 import dev.ide.agent.LlmProviderRegistry
 import dev.ide.agent.SimpleLlmProviderRegistry
 import dev.ide.agent.SimpleToolRegistry
+import dev.ide.bridge.chat.AgentLoopRunner
 import dev.ide.bridge.chat.RikkaChatState
 import dev.ide.bridge.chat.RikkaChatViewModel
 import dev.ide.bridge.memory.RikkaMemoryStore
@@ -112,8 +113,8 @@ class RikkaAgentIntegration private constructor(
      * @param loopRunner AgentLoop 运行回调（由 agent-impl 提供）
      */
     fun createChatViewModel(
-        loopRunner: chat.AgentLoopRunner,
-    ): chat.RikkaChatViewModel = chat.RikkaChatViewModel(
+        loopRunner: AgentLoopRunner,
+    ): RikkaChatViewModel = RikkaChatViewModel(
         providerRegistry = providerRegistry,
         toolRegistry = toolRegistry,
         workspace = workspace,
